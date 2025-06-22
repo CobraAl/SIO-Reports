@@ -3,25 +3,31 @@ from datetime import datetime, timedelta, timezone
 import csv
 import os
 import pandas as pd
-
 from dotenv import load_dotenv
-load_dotenv()
 
-# === CONFIG ===
+# virtual environment setup
+load_dotenv()
 API_KEY = os.getenv("API_KEY")
+
+# steps and logs
+if not API_KEY:
+    raise ValueError("API_KEY not found in .env file.")
+print(f"🔐 API Key Loaded: {API_KEY[:5]}...")
+
+# config
 ENDPOINT = "https://app.standardinformation.io/api/reports"
 BUYER_FILE = "BUYERS_ID.xlsx"
 OUTPUT_FOLDER = "reports"
 os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 
-# === DATE RANGE: Last 30 days ===
+# date range
 end_date = datetime.now(timezone.utc)
 start_date = end_date - timedelta(days=30)
 start_date_str = start_date.strftime("%Y-%m-%dT%H:%M:%SZ")
 end_date_str = end_date.strftime("%Y-%m-%dT%H:%M:%SZ")
 today_str = end_date.strftime("%Y-%m-%d")
 
-# === HEADERS ===
+# Headers
 headers = {
     "Authorization": API_KEY
 }
@@ -29,39 +35,36 @@ headers = {
 # === LOAD BUYERS ===
 buyers_df = pd.read_excel(BUYER_FILE)
 buyers = buyers_df.to_dict(orient="records")
+buyer_ids = [str(b['id']) for b in buyers]
 
-# === LOOP THROUGH BUYERS ===
-for buyer in buyers:
-    buyer_id = str(buyer['id'])
-    buyer_name = buyer['Buyer'].strip().replace("/", "-")  # avoid invalid filename chars
+# === API CALL ===
+params = {
+    "startDate": start_date_str,
+    "endDate": end_date_str,
+    "buyerIds": ",".join(buyer_ids)
+}
 
-    print(f"🔄 Fetching data for buyer {buyer_name} ({buyer_id})...")
+print("🔄 Fetching data for all buyers in a single call...")
 
-    params = {
-        "startDate": start_date_str,
-        "endDate": end_date_str,
-        "buyerId": buyer_id
-    }
+response = requests.get(ENDPOINT, headers=headers, params=params)
 
-    response = requests.get(ENDPOINT, headers=headers, params=params)
+if response.status_code == 200:
+    json_response = response.json()
+    data = json_response.get("data", [])
 
-    if response.status_code == 200:
-        json_response = response.json()
-        data = json_response.get("data", [])
+    if isinstance(data, list) and data:
+        keys = data[0].keys()
+        filename = f"All_Buyers_{today_str}.csv"
+        output_path = os.path.join(OUTPUT_FOLDER, filename)
 
-        if isinstance(data, list) and data:
-            keys = data[0].keys()
-            filename = f"{buyer_name}_{today_str}.csv"
-            output_path = os.path.join(OUTPUT_FOLDER, filename)
+        with open(output_path, "w", newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=keys)
+            writer.writeheader()
+            writer.writerows(data)
 
-            with open(output_path, "w", newline='', encoding='utf-8') as f:
-                writer = csv.DictWriter(f, fieldnames=keys)
-                writer.writeheader()
-                writer.writerows(data)
-
-            print(f"✅ Data saved to {output_path}")
-        else:
-            print(f"⚠️ No data for {buyer_name}")
+        print(f"✅ All data saved to {output_path}")
     else:
-        print(f"❌ API error for {buyer_name}: {response.status_code}")
-        print(response.text)
+        print("⚠️ No data returned.")
+else:
+    print(f"❌ API error: {response.status_code}")
+    print(response.text)
