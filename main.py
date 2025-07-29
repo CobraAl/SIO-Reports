@@ -5,7 +5,7 @@ import pandas as pd
 from io import BytesIO
 
 # === HARDCODED API KEY (Not secure, but as requested) ===
-API_KEY = "e689670b-047b-4a6e-a697-d45ade3fb3b5"
+API_KEY = "889cc431-8699-4f2a-8d27-50ba57bde87c"
 
 # Constants
 ENDPOINT = "https://app.standardinformation.io/api/reports"
